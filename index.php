@@ -217,37 +217,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAdmin) {
         exit;
     }
 
+    // ===== 上传处理：txt 到 uploads，漫画压缩包到 ComicViewer/contents =====
+    // 注意：上传后不自动跳转，只在页面显示成功提示
     if ($action === 'upload_book') {
         $uploadNotice = ['type' => 'error', 'text' => '上传失败，请重试。'];
+
         if (!empty($_FILES['book_file']) && is_array($_FILES['book_file'])) {
             $file = $_FILES['book_file'];
             if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
                 $origName = (string)($file['name'] ?? '');
                 $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+
+                // 文本小说：上传到 uploads 目录（原有逻辑）
                 if ($ext === 'txt') {
                     $baseName = pathinfo($origName, PATHINFO_FILENAME);
                     $baseName = preg_replace('/[^\p{Han}A-Za-z0-9_\-\s]+/u', '_', $baseName);
                     $baseName = safe_trim_fullwidth((string)$baseName);
                     if ($baseName === '') $baseName = 'book';
-                    $targetName = $baseName . '.txt';
-                    $targetPath = $incomingDir . '/' . $targetName;
-                    if (file_exists($targetPath)) {
-                        $targetName = $baseName . '_' . date('Ymd_His') . '_' . mt_rand(100, 999) . '.txt';
-                        $targetPath = $incomingDir . '/' . $targetName;
-                    }
+                // ===== 下面代码被简化，注意是否替代回原来的代码 =====
+                    $bookId = 'book_' . date('Ymd_His') . '_' . mt_rand(1000, 9999);
+                    $bookPath = $uploadDir . '/' . $bookId;
+
+                    if (!is_dir($bookPath)) mkdir($bookPath, 0777, true);
+
+                    $targetPath = $bookPath . '/book.txt';
                     if (move_uploaded_file($file['tmp_name'], $targetPath)) {
-                        $uploadNotice = ['type' => 'success', 'text' => '✅ 已上传到 incoming 文件夹，稍后将自动导入。'];
-                    } else {
-                        $uploadNotice = ['type' => 'error', 'text' => '上传失败，无法保存文件。'];
+                        file_put_contents($bookPath . '/title.txt', $baseName);
+                        $lib['book_map'][$bookId] = 'default';
+                        $libChanged = true;
+                        $uploadNotice = ['type' => 'success', 'text' => '✅ 文本小说上传成功：' . htmlspecialchars($baseName)];
                     }
+                // ===== 上面是被优化的代码
+
+                // 漫画压缩包：上传到 ComicViewer/contents 目录（LeComics 使用）
+                } elseif (in_array($ext, ['zip', 'cbz', 'cbr'])) {
+                    $baseName = pathinfo($origName, PATHINFO_FILENAME);
+                    $baseName = preg_replace('/[^\p{Han}A-Za-z0-9_\-\s]+/u', '_', $baseName);
+                    $baseName = safe_trim_fullwidth((string)$baseName);
+                    if ($baseName === '') $baseName = 'comic';
+
+                    // 生成唯一文件名，避免覆盖
+                    $targetName = $baseName . '.' . $ext;
+                    $targetPath = $comicsDir . '/' . $targetName;
+                    $counter = 1;
+                    while (file_exists($targetPath)) {
+                        $targetName = $baseName . '_' . $counter . '.' . $ext;
+                        $targetPath = $comicsDir . '/' . $targetName;
+                        $counter++;
+                    }
+
+                    if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+                        $uploadNotice = ['type' => 'success', 'text' => '✅ 漫画压缩包上传成功：' . htmlspecialchars($targetName) . '（请在下方漫画列表中点击阅读）'];
+                    } else {
+                        $uploadNotice = ['type' => 'error', 'text' => '漫画上传失败，无法保存文件'];
+                    }
+
                 } else {
-                    $uploadNotice = ['type' => 'error', 'text' => '仅支持上传 .txt 文件。'];
+                    $uploadNotice = ['type' => 'error', 'text' => '仅支持 .txt .zip .cbz .cbr 文件'];
                 }
-            } else {
-                $uploadNotice = ['type' => 'error', 'text' => '上传失败，文件有误。'];
             }
         }
     }
+    // 注意：上传后不执行 header('Location: ...') 跳转，保持在当前页面显示提示
 }
 
 // -----------------------------
