@@ -8,6 +8,17 @@ if (needs_initial_setup()) {
     exit;
 }
 
+// ===== 新增：首页登录保护 =====
+// 未登录且不是访问登录页/初始化页时，强制跳转登录
+$isLoginPage = (basename($_SERVER['PHP_SELF']) === 'login.php');
+$isInitPage  = (basename($_SERVER['PHP_SELF']) === 'init.php');
+
+if (empty($_SESSION['admin']) && !$isLoginPage && !$isInitPage) {
+    header('Location: login.php');
+    exit;
+}
+// ===== 登录保护结束 =====
+
 $baseDir     = __DIR__;
 $incomingDir = $baseDir . '/incoming';
 $uploadDir   = $baseDir . '/uploads';
